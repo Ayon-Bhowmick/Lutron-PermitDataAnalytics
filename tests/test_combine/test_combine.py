@@ -27,7 +27,7 @@ class CombineTest(unittest.TestCase):
         # remove combinedData that was created
         os.remove("./combined_data/combinedData.csv")
         pass
-    
+
 if __name__ == "__main__":
     logging.basicConfig(stream=sys.stdout)
     logging.getLogger("test").setLevel(logging.DEBUG)
