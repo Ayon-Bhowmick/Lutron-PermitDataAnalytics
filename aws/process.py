@@ -38,7 +38,7 @@ def austin() -> pd.DataFrame:
     austin_stripped = austin_raw[austin_raw.contractor_trade == "Electrical Contractor"]
 
     # extract only the columns we need
-    austin_stripped = austin_stripped[["issue_date", "location", "contractor_company_name"]]
+    austin_stripped = austin_stripped[["issue_date", "location", "contractor_company_name", "electrical_valuation_remodel"]]
 
     # extract latitude and longitude from location column
     # {'latitude': '30.29406429', 'longitude': '-97.69323996', 'human_address': '{""address"": """", ""city"": """", ""state"": """", ""zip"": """"}'}
@@ -65,6 +65,9 @@ def new_york() -> pd.DataFrame:
 
     # extract only the columns we need
     new_york_stripped = new_york_raw[["job_start_date", "firm_name", 'gis_latitude', 'gis_longitude']]
+
+    # add a NULL column to match the other dataframes
+    new_york_stripped["valuation"] = nan
 
     # drop rows with missing firm_name
     new_york_stripped = new_york_stripped.dropna(subset=["firm_name"])
@@ -99,7 +102,7 @@ def chicago() -> pd.DataFrame:
     chicago_stripped = chicago_stripped.dropna(subset=["contractor_names"])
 
     #  extract only the columns we need
-    chicago_stripped = chicago_stripped[["issue_date", "contractor_names", "latitude", "longitude"]]
+    chicago_stripped = chicago_stripped[["issue_date", "contractor_names", "latitude", "longitude", "reported_cost"]]
 
     # split issue_date to only include date
     chicago_stripped["issue_date"] = chicago_stripped["issue_date"].apply(lambda x: x.split("T")[0])
@@ -138,7 +141,7 @@ def mesa()-> pd.DataFrame:
     mesa_raw = read_s3(RAW_BUCKET, "mesa.csv")
 
     # extract only the columns we need
-    mesa_stripped = mesa_raw[["issued_date", "contractor_name", "latitude", "longitude"]]
+    mesa_stripped = mesa_raw[["issued_date", "contractor_name", "latitude", "longitude", "value"]]
 
     # drop rows with missing contractor_name
     mesa_stripped = mesa_stripped.dropna(subset=["contractor_name"])
@@ -158,7 +161,7 @@ def la()-> pd.DataFrame:
     la_raw = read_s3(RAW_BUCKET, "la.csv")
 
     # extract only the columns we need
-    la_stripped = la_raw[["issue_date", "contractors_business_name", "location_1", "permit_type"]]
+    la_stripped = la_raw[["issue_date", "contractors_business_name", "location_1", "permit_type", "valuation"]]
 
     # extract latitude and longitude from location_1
     # {'latitude': '33.99393', 'human_address': '{"address": "", "city": "", "state": "", "zip": ""}', 'needs_recoding': False, 'longitude': '-118.33429'}
