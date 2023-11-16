@@ -83,30 +83,23 @@ def chicago() -> pd.DataFrame:
     # read in raw data from s3
     chicago_raw = read_s3(RAW_BUCKET, "chicago.csv")
 
+    # copy the dataframe
+    chicago_stripped = chicago_raw.copy()
+
+    # remove non electrical contractors
+    contractor_names = [f"contact_{x}_name" for x in range(1, 12)]
+    contractor_types = [f"contact_{x}_type" for x in range(1, 12)]
+    for contractor, t_col in zip(contractor_names, contractor_types):
+        chicago_stripped[contractor] = chicago_stripped.apply(lambda row: row[contractor] if row[t_col] == "CONTRACTOR-ELECTRICAL" else nan, axis=1)
+
     # melt the dataframe to have one row per contractor
-    chicago_stripped = pd.melt(chicago_raw, id_vars=["issue_date", "latitude", "longitude"], value_vars=[f"contact_{x}_name" for x in range(1, 12)].extend([f"contact_{x}_type" for x in range(1, 12)]), var_name="var", value_name="value")
+    chicago_stripped = pd.melt(chicago_stripped, id_vars=["issue_date", "latitude", "longitude"], value_vars=contractor_names, var_name="num", value_name="contractor_names")
 
     # drop rows with missing contractor_name
-    chicago_stripped = chicago_stripped.dropna(subset=["value"])
-
-    chicago_stripped["cid"] = chicago_stripped["var"].str.extract('(\d+)').astype(int)
-    chicago_stripped = chicago_stripped[chicago_stripped["var"].str.contains("Contractor|Type")]
-    chicago_stripped = chicago_stripped.pivot(index=["issue_date", "latitude", "longitude", "cid"], columns='var', values='value').reset_index()
-
-    # # make dataframe of only electrical contractors
-    # contractor_names = chicago_raw.filter(regex="contact_\d*_name")
-    # contractor_trade = chicago_raw.filter(regex="contact_\d*_type")
-    # contractor_trade.columns = contractor_names.columns
-    # electrical_contractors = contractor_names[contractor_trade.eq("CONTRACTOR-ELECTRICAL")]
-
-    # # convert electrical contractors to a series of tuples
-    # chicago_raw["electrical_contractors"] = electrical_contractors.apply(lambda x: tuple(x.dropna()), axis=1)
+    chicago_stripped = chicago_stripped.dropna(subset=["contractor_names"])
 
     #  extract only the columns we need
-    # chicago_stripped = chicago_raw[["issue_date", "electrical_contractors", "latitude", "longitude"]]
-
-    # drop rows with missing electrical contractors
-    # chicago_stripped = chicago_stripped[chicago_stripped.electrical_contractors.apply(lambda x: len(x) > 0)]
+    chicago_stripped = chicago_stripped[["issue_date", "contractor_names", "latitude", "longitude"]]
 
     # split issue_date to only include date
     chicago_stripped["issue_date"] = chicago_stripped["issue_date"].apply(lambda x: x.split("T")[0])
