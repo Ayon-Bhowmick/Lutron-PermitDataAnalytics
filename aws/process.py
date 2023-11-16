@@ -1,4 +1,4 @@
-"""This script strips the raw data to only include the columns we need for the project."""
+"""Processes the individual raw data files and combines them into a single csv file"""
 
 import pandas as pd
 import logging
@@ -96,13 +96,13 @@ def chicago() -> pd.DataFrame:
         chicago_stripped[contractor] = chicago_stripped.apply(lambda row: row[contractor] if row[t_col] == "CONTRACTOR-ELECTRICAL" else nan, axis=1)
 
     # melt the dataframe to have one row per contractor
-    chicago_stripped = pd.melt(chicago_stripped, id_vars=["issue_date", "latitude", "longitude"], value_vars=contractor_names, var_name="num", value_name="contractor_names")
+    chicago_stripped = pd.melt(chicago_stripped, id_vars=["issue_date", "latitude", "longitude"], value_vars=contractor_names, var_name="num", value_name="contractor_name")
 
     # drop rows with missing contractor_name
-    chicago_stripped = chicago_stripped.dropna(subset=["contractor_names"])
+    chicago_stripped = chicago_stripped.dropna(subset=["contractor_name"])
 
     #  extract only the columns we need
-    chicago_stripped = chicago_stripped[["issue_date", "contractor_names", "latitude", "longitude", "reported_cost"]]
+    chicago_stripped = chicago_stripped[["issue_date", "contractor_name", "latitude", "longitude", "reported_cost"]]
 
     # split issue_date to only include date
     chicago_stripped["issue_date"] = chicago_stripped["issue_date"].apply(lambda x: x.split("T")[0])
@@ -181,14 +181,52 @@ def la()-> pd.DataFrame:
     print("Saved la.csv")
     return la_stripped
 
-def strip_dataframes(city_list) -> list:
+def strip_dataframes(city_list: str) -> list:
     """
     Strips the specified dataframes and saves them as csv files
     :param city_list: a list of the cities to strip
     """
     CITY_FUNCTIONS = {"austin": austin, "new_york": new_york, "chicago": chicago, "philly": philly, "mesa": mesa, "la": la}
-    data_list = [CITY_FUNCTIONS[city]() for city in city_list]
+    data_list: dir[str, pd.DataFrame] = {city:CITY_FUNCTIONS[city]() for city in city_list}
     return data_list
 
+def combine_data(cities: dir[str, pd.DataFrame]):
+    """
+    Combines .csv files in the directory "stripped_data" into a single file called "combinedData" store in the directory "combined_data"
+    Each .csv file from the directory "stripped_data" will have an added column named "city" that is filled with the name of their respective city
+    """
+    # list constants that hold the identified similar names
+    column_map = {
+        "issued_date" : {"issue_date", "job_start_date", "issued_date", "permitissuedate"},
+        "contractor" : {"contractor_company_name", "electrical_contractors","firm_name", "contractor_name", "contractorname"},
+        "latitude" : {"latitude","gis_latitude", "lat"},
+        "longitude" : {"longitude","gis_longitude", "lng"}
+        "valuation": {"valuation", "value", "market_value", "reported_cost", "electrical_valuation_remodel"}
+    }
+
+    # dataframe to store the combined data of all the cities after standardization
+    combined_df = pd.DataFrame()
+
+    # for loop that will append the data to the lists
+    for city_name in cities.keys():
+        # dataframe to store the standardized data for each city
+        standardized_df = pd.DataFrame()
+        city = cities[city_name]
+        # go through column dictionary. dst_column is the standardized column name and src_column are the potential columns names from the data sets
+        for dst_column, src_columns in column_map.items():
+            # go through each src_column name and check if the src_column name is in the city"s columns.
+            for src_column in src_columns:
+                # if the src_column is found, than copy over the city"s src_column to the standardized_df dataframe"s dst_column
+                if src_column in city.columns:
+                    # copy over the city"s src_column to the standardized_df dataframe"s dst_column
+                    standardized_df[dst_column] = pd.Series(city[src_column])
+        # set the dataframe for the current city"s "city" column to the city_name which is the file"s name.
+        standardized_df["city"] = city_name
+        # concat the city data frame and the current combined data frame
+        combined_df = pd.concat([combined_df, standardized_df])
+
+    # create csv with the dataframe with the combined data and store it in the combined_data folder
+    write_s3("combinedData.csv")
+
 if __name__ == "__main__":
-    print(len(strip_dataframes(["philly"])))
+    combine_data(strip_dataframes(["austin", "new_york", "chicago", "philly", "mesa", "la"]))
