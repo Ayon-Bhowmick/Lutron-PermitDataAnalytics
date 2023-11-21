@@ -9,7 +9,8 @@ import boto3
 from io import StringIO
 
 RAW_BUCKET = "lehigh-permit-raw-data-bucket"
-STRIPED_BUCKET = "lehigh-permit-processed-data-bucket"
+PROCESSED_BUCKET = "lehigh-permit-processed-data-bucket"
+COMBINED_BUCKET = "lehigh-permit-combined-data-bucket"
 
 # glueContext = GlueContext(sc)
 # logger = glueContext.get_logger()
@@ -51,7 +52,7 @@ def austin() -> pd.DataFrame:
 
     # split issue_date to only include date
     austin_stripped["issue_date"] = austin_stripped["issue_date"].apply(lambda x: x.split("T")[0])
-    write_s3(austin_stripped, STRIPED_BUCKET, "austin.csv")
+    write_s3(austin_stripped, PROCESSED_BUCKET, "austin.csv")
     print("Saved austin.csv")
     return austin_stripped
 
@@ -74,7 +75,7 @@ def new_york() -> pd.DataFrame:
 
     # split issue_date to only include date
     new_york_stripped["job_start_date"] = new_york_stripped["job_start_date"].apply(lambda x: x.split("T")[0] if type(x) == str else nan)
-    write_s3(new_york_stripped, STRIPED_BUCKET, "new_york.csv")
+    write_s3(new_york_stripped, PROCESSED_BUCKET, "new_york.csv")
     print("Saved new_york.csv")
     return new_york_stripped
 
@@ -96,7 +97,7 @@ def chicago() -> pd.DataFrame:
         chicago_stripped[contractor] = chicago_stripped.apply(lambda row: row[contractor] if row[t_col] == "CONTRACTOR-ELECTRICAL" else nan, axis=1)
 
     # melt the dataframe to have one row per contractor
-    chicago_stripped = pd.melt(chicago_stripped, id_vars=["issue_date", "latitude", "longitude"], value_vars=contractor_names, var_name="num", value_name="contractor_name")
+    chicago_stripped = pd.melt(chicago_stripped, id_vars=["issue_date", "latitude", "longitude", "reported_cost"], value_vars=contractor_names, var_name="num", value_name="contractor_name")
 
     # drop rows with missing contractor_name
     chicago_stripped = chicago_stripped.dropna(subset=["contractor_name"])
@@ -106,7 +107,7 @@ def chicago() -> pd.DataFrame:
 
     # split issue_date to only include date
     chicago_stripped["issue_date"] = chicago_stripped["issue_date"].apply(lambda x: x.split("T")[0])
-    write_s3(chicago_stripped, STRIPED_BUCKET, "chicago.csv")
+    write_s3(chicago_stripped, PROCESSED_BUCKET, "chicago.csv")
     print("Saved chicago.csv")
     return chicago_stripped
 
@@ -127,7 +128,7 @@ def philly()-> pd.DataFrame:
     # rename the column location to address to match the other philly csv
     philly_raw2.rename(columns={"location": "address"}, inplace=True)
     philly_stripped = pd.merge(philly_stripped, philly_raw2, on=["address"], how="left")
-    write_s3(philly_stripped, STRIPED_BUCKET, "philly.csv")
+    write_s3(philly_stripped, PROCESSED_BUCKET, "philly.csv")
     print("Saved philly.csv")
     return philly_stripped
 
@@ -148,7 +149,7 @@ def mesa()-> pd.DataFrame:
 
     # split issue_date to only include date
     mesa_stripped["issued_date"] = mesa_stripped["issued_date"].apply(lambda x: x.split("T")[0])
-    write_s3(mesa_stripped, STRIPED_BUCKET, "mesa.csv")
+    write_s3(mesa_stripped, PROCESSED_BUCKET, "mesa.csv")
     print("Saved mesa.csv")
     return mesa_stripped
 
@@ -177,7 +178,7 @@ def la()-> pd.DataFrame:
 
     # split issue_date to only include date
     la_stripped["issue_date"] = la_stripped["issue_date"].apply(lambda x: x.split("T")[0])
-    write_s3(la_stripped, STRIPED_BUCKET, "la.csv")
+    write_s3(la_stripped, PROCESSED_BUCKET, "la.csv")
     print("Saved la.csv")
     return la_stripped
 
@@ -187,10 +188,10 @@ def strip_dataframes(city_list: str) -> list:
     :param city_list: a list of the cities to strip
     """
     CITY_FUNCTIONS = {"austin": austin, "new_york": new_york, "chicago": chicago, "philly": philly, "mesa": mesa, "la": la}
-    data_list: dir[str, pd.DataFrame] = {city:CITY_FUNCTIONS[city]() for city in city_list}
+    data_list: dict[str, pd.DataFrame] = {city: CITY_FUNCTIONS[city]() for city in city_list}
     return data_list
 
-def combine_data(cities: dir[str, pd.DataFrame]):
+def combine_data(cities):
     """
     Combines .csv files in the directory "stripped_data" into a single file called "combinedData" store in the directory "combined_data"
     Each .csv file from the directory "stripped_data" will have an added column named "city" that is filled with the name of their respective city
@@ -198,9 +199,9 @@ def combine_data(cities: dir[str, pd.DataFrame]):
     # list constants that hold the identified similar names
     column_map = {
         "issued_date" : {"issue_date", "job_start_date", "issued_date", "permitissuedate"},
-        "contractor" : {"contractor_company_name", "electrical_contractors","firm_name", "contractor_name", "contractorname"},
+        "contractor" : {"contractor_company_name", "electrical_contractors","firm_name", "contractor_name", "contractorname", "contractors_business_name"},
         "latitude" : {"latitude","gis_latitude", "lat"},
-        "longitude" : {"longitude","gis_longitude", "lng"}
+        "longitude" : {"longitude","gis_longitude", "lng"},
         "valuation": {"valuation", "value", "market_value", "reported_cost", "electrical_valuation_remodel"}
     }
 
@@ -225,8 +226,11 @@ def combine_data(cities: dir[str, pd.DataFrame]):
         # concat the city data frame and the current combined data frame
         combined_df = pd.concat([combined_df, standardized_df])
 
+    # set 0 valuation to nan
+    combined_df["valuation"] = combined_df["valuation"].apply(lambda x: nan if x == 0 else x)
+
     # create csv with the dataframe with the combined data and store it in the combined_data folder
-    write_s3("combinedData.csv")
+    write_s3(combined_df, COMBINED_BUCKET,"combinedData.csv")
 
 if __name__ == "__main__":
     combine_data(strip_dataframes(["austin", "new_york", "chicago", "philly", "mesa", "la"]))
