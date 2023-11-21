@@ -10,6 +10,7 @@ from io import StringIO
 
 RAW_BUCKET = "lehigh-permit-raw-data-bucket"
 PROCESSED_BUCKET = "lehigh-permit-processed-data-bucket"
+COMBINED_BUCKET = "lehigh-permit-combined-data-bucket"
 
 # glueContext = GlueContext(sc)
 # logger = glueContext.get_logger()
@@ -229,7 +230,7 @@ def combine_data(cities):
     combined_df["valuation"] = combined_df["valuation"].apply(lambda x: nan if x == 0 else x)
 
     # create csv with the dataframe with the combined data and store it in the combined_data folder
-    write_s3(combined_df, PROCESSED_BUCKET,"combinedData.csv")
+    write_s3(combined_df, COMBINED_BUCKET,"combinedData.csv")
 
 if __name__ == "__main__":
     combine_data(strip_dataframes(["austin", "new_york", "chicago", "philly", "mesa", "la"]))
